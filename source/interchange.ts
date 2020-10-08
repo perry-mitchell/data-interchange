@@ -1,6 +1,7 @@
 import { Layerr } from "layerr";
 import { isPromise } from "./promise";
 import { BOOMERANG_RETURN, boomerang } from "./boomerang";
+import { createQueue, enqueue } from "./queue";
 import {
     Interchange,
     InterchangeOptions,
@@ -19,13 +20,18 @@ export function createInterchange<T>(
     sources: Sources<T>,
     options: InterchangeOptions = {}
 ): Interchange<T> {
+    options.queue = options.queue || createQueue();
     return {
-        read: (id: any): Promise<T> => processRead(sources, id),
+        read: (id: any): Promise<T> => processRead(sources, id, options),
         write: (value: T): Promise<T> => processWrite(sources, value, options)
     };
 }
 
-async function processRead<T>(sources: Sources<T>, id: any): Promise<T> {
+async function processRead<T>(
+    sources: Sources<T>,
+    id: any,
+    options: InterchangeOptions = {}
+): Promise<T> {
     let lastValue: any,
         lastConverters: [(val: any) => any, (val: any) => any] = null;
     await boomerang(sources, async (source, sourceIndex, returning) => {
@@ -54,7 +60,11 @@ async function processRead<T>(sources: Sources<T>, id: any): Promise<T> {
             // Because all prior indexes (sources) did NOT
             // return a value, they should be written to
             if (writeMissingRead && typeof write === "function") {
-                let writeResult = write(lastValue);
+                let writeResult = source.queueWriteKey
+                    ? enqueue(options.queue, resolveQueueKey(lastValue, source.queueWriteKey), () =>
+                          write(lastValue)
+                      )
+                    : write(lastValue);
                 if (isPromise(writeResult)) {
                     writeResult = await writeResult;
                 }
@@ -66,7 +76,11 @@ async function processRead<T>(sources: Sources<T>, id: any): Promise<T> {
         if (typeof read === "function") {
             let initialValue: any;
             try {
-                initialValue = read(id);
+                initialValue = source.queueReadKey
+                    ? enqueue(options.queue, resolveQueueKey(id, source.queueReadKey), () =>
+                          read(id)
+                      )
+                    : read(id);
                 if (isPromise(initialValue)) {
                     initialValue = await initialValue;
                 }
@@ -88,6 +102,10 @@ async function processRead<T>(sources: Sources<T>, id: any): Promise<T> {
     return lastValue;
 }
 
+function resolveQueueKey(value: any, resolver: string | ((value: any) => string)): string {
+    return typeof resolver === "string" ? resolver : resolver(value);
+}
+
 async function processWrite<T>(
     sources: Sources<T>,
     value: T,
@@ -100,7 +118,11 @@ async function processWrite<T>(
             sources.map(async source => {
                 const { writeWait = true } = source;
                 if (typeof source.write !== "function") return;
-                const result = source.write(value);
+                const result = source.queueWriteKey
+                    ? enqueue(options.queue, resolveQueueKey(value, source.queueWriteKey), () =>
+                          source.write(value)
+                      )
+                    : source.write(value);
                 if (writeWait && isPromise(result)) {
                     await result;
                 }
@@ -121,9 +143,13 @@ async function processWrite<T>(
         // Run backwards writing
         lastValue = values[values.length - 1];
         for (let ind = sources.length - 1; ind >= 0; ind -= 1) {
-            const { write, writeWait = true } = sources[ind];
+            const { queueWriteKey, write, writeWait = true } = sources[ind];
             if (typeof write !== "function") continue;
-            const writeResult = write(lastValue);
+            const writeResult = queueWriteKey
+                ? enqueue(options.queue, resolveQueueKey(lastValue, queueWriteKey), () =>
+                      write(lastValue)
+                  )
+                : write(lastValue);
             if (writeWait) {
                 lastValue = isPromise(writeResult) ? await writeResult : writeResult;
                 if (ind > 0) {

@@ -1,13 +1,18 @@
+import * as ChannelQueue from "@buttercup/channel-queue";
+
 export interface Interchange<T> {
     read: (id?: any) => Promise<T>;
     write: (value?: T) => Promise<T>;
 }
 
 export interface InterchangeOptions {
+    queue?: ChannelQueue;
     writeMode?: WriteMode;
 }
 
 interface InterchangeSource {
+    queueReadKey?: string | ((id?: any) => string);
+    queueWriteKey?: string | ((value: any) => string);
     read?: (id?: any) => any;
     readError?: (err?: Error) => ReadAction;
     write?: <T>(value: T) => T;
