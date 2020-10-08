@@ -85,3 +85,36 @@ createInterchange([
     }
 ], { writeMode: WriteMode.Parallel });
 ```
+
+### Delayed writes
+
+You can delay writes in certain sources by using the `writeWait` property. Setting it to `true` on a source will result in each write to a source to return immediately, with the writing occuring in the background.
+
+_If you expect reads to happen on the same source, you should use queues to prevent race conditions._
+
+### Queuing
+
+Reads and writes can be queued so that, even if a read and a write occur almost simultaneously, data is read and written in order, even asynchronously.
+
+For queuing to work on a source, specify either `queueReadKey` or `queueWriteKey`, or both. Although you can set them separately, you will mostly need to set them to the **same key** per resource (unique item). Reads use the `queueReadKey` while writes use the `queueWriteKey`, so if a queue is to block reads on a resource that's currently being written to, they should match.
+
+Both of these keys can either be a `string`, or a function that returns a `string`. The function must be synchronous. The function will be provided the item being written or the ID being read.
+
+Example:
+
+```typescript
+const source = {
+    read: () => { /* ... */ },
+    write: () => { /* ... */ },
+    queueReadKey: (id: string) => `item:${id}`,
+    queueWriteKey: (item: { id: string }) => `item:${item.id}`
+}
+```
+
+You can also provide your own queue using an option:
+
+```typescript
+createInterchange([], { queue });
+```
+
+Queues can be created by using `createQueue`, but are essentially `ChannelQueue` instances from [`@buttercup/channel-queue`](https://github.com/buttercup/channel-queue).
