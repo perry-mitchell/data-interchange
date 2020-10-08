@@ -1,6 +1,12 @@
 const { expect } = require("chai");
 const { createInterchange } = require("../../dist/interchange.js");
+const { createQueue } = require("../../dist/queue.js");
 const { WriteMode } = require("../../dist/types.js");
+
+const slow = (value, time = 150) =>
+    new Promise(resolve => {
+        setTimeout(() => resolve(value), time);
+    });
 
 describe("interchange", function() {
     it("creates an interchange adapter", function() {
@@ -111,6 +117,28 @@ describe("interchange", function() {
             expect(writeSpy2.firstCall.args[0]).to.deep.equal({ username: "test" });
             expect(writeSpy1.callCount).to.equal(1, "Write #1 should be called once");
             expect(writeSpy1.firstCall.args[0]).to.deep.equal({ n: "test" });
+        });
+
+        it("supports queuing reads", async function() {
+            const queue = createQueue();
+            sinon.spy(queue, "channel");
+            const adapter = createInterchange(
+                [
+                    {
+                        read: () => undefined,
+                        queueReadKey: "test"
+                    },
+                    {
+                        read: () => slow(20),
+                        queueReadKey: "test"
+                    }
+                ],
+                { queue }
+            );
+            const val = await adapter.read();
+            expect(val).to.equal(20);
+            expect(queue.channel.calledWithExactly("test")).to.be.true;
+            expect(queue.channel.callCount).to.equal(2);
         });
     });
 
@@ -267,6 +295,81 @@ describe("interchange", function() {
                 expect(writeSpy1.firstCall.args[0]).to.deep.equal({ id: 1 });
                 expect(writeSpy2.firstCall.args[0]).to.deep.equal({ identifier: 1 });
                 expect(result).to.deep.equal({ id: 1 });
+            });
+
+            describe("using delayed writes", function() {
+                beforeEach(function() {
+                    this.storage = {
+                        one: undefined,
+                        two: 3
+                    };
+                    this.source1 = {
+                        read: () =>
+                            new Promise(resolve => {
+                                setTimeout(() => {
+                                    resolve(this.storage.one);
+                                }, 150);
+                            }),
+                        write: val =>
+                            new Promise(resolve => {
+                                setTimeout(() => {
+                                    this.storage.one = val;
+                                    resolve(this.storage.one);
+                                }, 150);
+                            })
+                    };
+                    this.source2 = {
+                        read: () =>
+                            new Promise(resolve => {
+                                setTimeout(() => {
+                                    resolve(this.storage.two);
+                                }, 50);
+                            }),
+                        write: val =>
+                            new Promise(resolve => {
+                                setTimeout(() => {
+                                    this.storage.two = val;
+                                    resolve(this.storage.two);
+                                }, 500);
+                            }),
+                        writeWait: false
+                    };
+                    this.adapter = createInterchange([this.source1, this.source2], {
+                        writeMode: WriteMode.Series
+                    });
+                });
+
+                it("can return before delayed writes are performed", async function() {
+                    await this.adapter.write(5);
+                    expect(this.storage.one).to.equal(
+                        5,
+                        "Non-wait storage should write immediately"
+                    );
+                    expect(this.storage.two).to.equal(
+                        3,
+                        "Non-wait storage should not write immediately"
+                    );
+                });
+
+                it("can queue reads after writes", async function() {
+                    this.adapter = createInterchange(
+                        [
+                            {
+                                ...this.source2,
+                                queueReadKey: () => "test",
+                                queueWriteKey: () => "test"
+                            }
+                        ],
+                        { writeMode: WriteMode.Series }
+                    );
+                    expect(await this.adapter.read()).to.equal(3);
+                    await this.adapter.write(5);
+                    expect(this.storage.two).to.equal(
+                        3,
+                        "Non-wait storage should not write immediately"
+                    );
+                    expect(await this.adapter.read()).to.equal(5);
+                });
             });
         });
     });
