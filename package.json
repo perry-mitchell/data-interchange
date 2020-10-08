@@ -4,10 +4,14 @@
   "description": "Data interchange handler & DB fallback handler",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "rimraf dist && tsc",
+    "prepublishOnly": "npm run build",
     "test": "npm run build && npm run test:specs",
     "test:specs": "nyc mocha -r test/index.js 'test/specs/**/*.spec.js'"
   },
+  "files": [
+    "dist/**/*"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/perry-mitchell/data-interchange.git"
@@ -34,6 +38,7 @@
     "chai": "^4.2.0",
     "mocha": "^8.1.3",
     "nyc": "^15.1.0",
+    "rimraf": "^3.0.2",
     "sinon": "^9.2.0",
     "typescript": "^4.0.3"
   }
