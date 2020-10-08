@@ -14,6 +14,8 @@ An interchanger can take care of a number of data-synchronising tasks in the pro
 Take the following example - Let's read and write "messages" to multiple sources, each source having a subtle differences in format:
 
 ```typescript
+import { createInterchange } from "data-interchange";
+
 interface MessageA {
     id: string;
     time: number;
@@ -64,6 +66,8 @@ await write(messageToWrite);
 Or if all types are the same:
 
 ```typescript
+import { WriteMode, createInterchange } from "data-interchange";
+
 const readMessageA: (id: string) => MessageA = { /* ... */ };
 const readMessageB: (id: string) => MessageA = { /* ... */ };
 const writeMessageA: (msg: MessageA) => MessageA = { /* ... */ };
@@ -79,5 +83,5 @@ createInterchange([
         read: (id: string) => readMessageB(id),
         write: (msg: MessageA) => writeMessageB(MessageA)
     }
-]);
+], { writeMode: WriteMode.Parallel });
 ```
