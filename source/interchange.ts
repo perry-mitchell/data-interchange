@@ -1,7 +1,7 @@
 import { Layerr } from "layerr";
 import { isPromise } from "./promise";
 import { BOOMERANG_RETURN, boomerang } from "./boomerang";
-import { Interchange, InterchangeSourceAuxiliary, InterchangeSourcePrimary, ReadAction } from "./types";
+import { Interchange, InterchangeOptions, InterchangeSourceAuxiliary, InterchangeSourcePrimary, ReadAction, WriteMode } from "./types";
 
 export type Sources<T> = [
     InterchangeSourcePrimary<T>,
@@ -12,11 +12,12 @@ const UNDEFINED = "undefined";
 const VALUE_NOOP = <T>(val: T): T => val;
 
 export function createInterchange<T>(
-    sources: Sources<T>
+    sources: Sources<T>,
+    options: InterchangeOptions = {}
 ): Interchange<T> {
     return {
         read: (id: any): Promise<T> => processRead(sources, id),
-        write: () => null
+        write: (value: T): Promise<T> => processWrite(sources, value, options)
     };
 }
 
@@ -82,4 +83,74 @@ async function processRead<T>(sources: Sources<T>, id: any): Promise<T> {
         }
     });
     return lastValue;
+}
+
+async function processWrite<T>(
+    sources: Sources<T>,
+    value: T,
+    options: InterchangeOptions = {}
+): Promise<T> {
+    const {
+        writeMode = WriteMode.Series
+    } = options;
+    if (writeMode === WriteMode.Parallel) {
+        // All sources are written with the same value in parallel
+        await Promise.all(sources.map(async source => {
+            const { writeWait = true } = source;
+            if (typeof source.write !== "function") return;
+            const result = source.write(value);
+            if (writeWait && isPromise(result)) {
+                await result;
+            }
+        }));
+        return value;
+    } else if (writeMode === WriteMode.Series) {
+        // Run from first to last, converting, and then backwards
+        // writing each value
+        let lastValue = value;
+        const values = sources.map((source, ind) => {
+            if (ind === 0) return value;
+            const {
+                convert = {}
+            } = source as InterchangeSourceAuxiliary;
+            const {
+                write = VALUE_NOOP
+            } = convert;
+            lastValue = write(lastValue);
+            return lastValue;
+        });
+        // Run backwards writing
+        lastValue = values[values.length - 1];
+        for (let ind = sources.length - 1; ind >= 0; ind -= 1) {
+            const {
+                write,
+                writeWait = true
+            } = sources[ind];
+            if (typeof write !== "function") continue;
+            const writeResult = write(lastValue);
+            if (writeWait) {
+                lastValue = isPromise(writeResult) ? await writeResult : writeResult;
+                if (ind > 0) {
+                    const { convert = {} } = sources[ind] as InterchangeSourceAuxiliary;
+                    const {
+                        read = VALUE_NOOP
+                    } = convert;
+                    // Convert this value
+                    lastValue = read(lastValue);
+                }
+            } else {
+                // Not waiting, so set the lastValue to be the
+                // correct pre-calculated value
+                if (ind > 0) {
+                    lastValue = values[ind - 1];
+                } else {
+                    // First index
+                    lastValue = values[0];
+                }
+            }
+        }
+        return lastValue;
+    } else {
+        throw new Layerr(`Invalid write mode: ${writeMode}`);
+    }
 }
