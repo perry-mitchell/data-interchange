@@ -1,12 +1,16 @@
 import { Layerr } from "layerr";
 import { isPromise } from "./promise";
 import { BOOMERANG_RETURN, boomerang } from "./boomerang";
-import { Interchange, InterchangeOptions, InterchangeSourceAuxiliary, InterchangeSourcePrimary, ReadAction, WriteMode } from "./types";
+import {
+    Interchange,
+    InterchangeOptions,
+    InterchangeSourceAuxiliary,
+    InterchangeSourcePrimary,
+    ReadAction,
+    WriteMode
+} from "./types";
 
-export type Sources<T> = [
-    InterchangeSourcePrimary<T>,
-    ...InterchangeSourceAuxiliary[]
-];
+export type Sources<T> = [InterchangeSourcePrimary<T>, ...InterchangeSourceAuxiliary[]];
 
 const UNDEFINED = "undefined";
 const VALUE_NOOP = <T>(val: T): T => val;
@@ -34,11 +38,10 @@ async function processRead<T>(sources: Sources<T>, id: any): Promise<T> {
         // Prepare value-conversion functions
         let convertRead = VALUE_NOOP,
             convertWrite = VALUE_NOOP;
-        if (typeof (<InterchangeSourceAuxiliary> source).convert === "object") {
-            const {
-                read: tempRead,
-                write: tempWrite
-            } = (<InterchangeSourceAuxiliary> source).convert;
+        if (typeof (<InterchangeSourceAuxiliary>source).convert === "object") {
+            const { read: tempRead, write: tempWrite } = (<InterchangeSourceAuxiliary>(
+                source
+            )).convert;
             convertRead = tempRead || convertRead;
             convertWrite = tempWrite || convertWrite;
         }
@@ -90,19 +93,19 @@ async function processWrite<T>(
     value: T,
     options: InterchangeOptions = {}
 ): Promise<T> {
-    const {
-        writeMode = WriteMode.Series
-    } = options;
+    const { writeMode = WriteMode.Series } = options;
     if (writeMode === WriteMode.Parallel) {
         // All sources are written with the same value in parallel
-        await Promise.all(sources.map(async source => {
-            const { writeWait = true } = source;
-            if (typeof source.write !== "function") return;
-            const result = source.write(value);
-            if (writeWait && isPromise(result)) {
-                await result;
-            }
-        }));
+        await Promise.all(
+            sources.map(async source => {
+                const { writeWait = true } = source;
+                if (typeof source.write !== "function") return;
+                const result = source.write(value);
+                if (writeWait && isPromise(result)) {
+                    await result;
+                }
+            })
+        );
         return value;
     } else if (writeMode === WriteMode.Series) {
         // Run from first to last, converting, and then backwards
@@ -110,31 +113,22 @@ async function processWrite<T>(
         let lastValue = value;
         const values = sources.map((source, ind) => {
             if (ind === 0) return value;
-            const {
-                convert = {}
-            } = source as InterchangeSourceAuxiliary;
-            const {
-                write = VALUE_NOOP
-            } = convert;
+            const { convert = {} } = source as InterchangeSourceAuxiliary;
+            const { write = VALUE_NOOP } = convert;
             lastValue = write(lastValue);
             return lastValue;
         });
         // Run backwards writing
         lastValue = values[values.length - 1];
         for (let ind = sources.length - 1; ind >= 0; ind -= 1) {
-            const {
-                write,
-                writeWait = true
-            } = sources[ind];
+            const { write, writeWait = true } = sources[ind];
             if (typeof write !== "function") continue;
             const writeResult = write(lastValue);
             if (writeWait) {
                 lastValue = isPromise(writeResult) ? await writeResult : writeResult;
                 if (ind > 0) {
                     const { convert = {} } = sources[ind] as InterchangeSourceAuxiliary;
-                    const {
-                        read = VALUE_NOOP
-                    } = convert;
+                    const { read = VALUE_NOOP } = convert;
                     // Convert this value
                     lastValue = read(lastValue);
                 }

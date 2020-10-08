@@ -14,8 +14,12 @@ describe("interchange", function() {
                 write: () => null
             }
         ]);
-        expect(adapter).to.have.property("read").that.is.a("function");
-        expect(adapter).to.have.property("write").that.is.a("function");
+        expect(adapter)
+            .to.have.property("read")
+            .that.is.a("function");
+        expect(adapter)
+            .to.have.property("write")
+            .that.is.a("function");
     });
 
     describe("read", function() {
@@ -79,11 +83,13 @@ describe("interchange", function() {
             const writeSpy1 = sinon.stub().returnsArg(0);
             const writeSpy2 = sinon.stub().returnsArg(0);
             const adapter = createInterchange([
-                { // { n }
+                {
+                    // { n }
                     read: () => undefined,
                     write: writeSpy1
                 },
-                { // { username }
+                {
+                    // { username }
                     read: () => undefined,
                     write: writeSpy2,
                     convert: {
@@ -91,7 +97,8 @@ describe("interchange", function() {
                         write: val => ({ name: val.n })
                     }
                 },
-                { // { name }
+                {
+                    // { name }
                     read: () => Promise.resolve({ name: "test" }),
                     convert: {
                         read: val => ({ username: val.name })
@@ -113,17 +120,20 @@ describe("interchange", function() {
                 const writeSpy1 = sinon.stub().returnsArg(0);
                 const writeSpy2 = sinon.stub().returnsArg(0);
                 const writeSpy3 = sinon.stub().returnsArg(0);
-                const adapter = createInterchange([
-                    {
-                        write: writeSpy1
-                    },
-                    {
-                        write: writeSpy2
-                    },
-                    {
-                        write: writeSpy3
-                    }
-                ], { writeMode: WriteMode.Parallel });
+                const adapter = createInterchange(
+                    [
+                        {
+                            write: writeSpy1
+                        },
+                        {
+                            write: writeSpy2
+                        },
+                        {
+                            write: writeSpy3
+                        }
+                    ],
+                    { writeMode: WriteMode.Parallel }
+                );
                 await adapter.write({ id: 1 });
                 expect(writeSpy1.callCount).to.equal(1, "Write #1 should be called once");
                 expect(writeSpy2.callCount).to.equal(1, "Write #1 should be called once");
@@ -139,17 +149,20 @@ describe("interchange", function() {
                 const writeSpy1 = sinon.stub().returnsArg(0);
                 const writeSpy2 = sinon.stub().returnsArg(0);
                 const writeSpy3 = sinon.stub().returnsArg(0);
-                const adapter = createInterchange([
-                    {
-                        write: writeSpy1
-                    },
-                    {
-                        write: writeSpy2
-                    },
-                    {
-                        write: writeSpy3
-                    }
-                ], { writeMode: WriteMode.Series });
+                const adapter = createInterchange(
+                    [
+                        {
+                            write: writeSpy1
+                        },
+                        {
+                            write: writeSpy2
+                        },
+                        {
+                            write: writeSpy3
+                        }
+                    ],
+                    { writeMode: WriteMode.Series }
+                );
                 await adapter.write({ id: 1 });
                 expect(writeSpy1.callCount).to.equal(1, "Write #1 should be called once");
                 expect(writeSpy2.callCount).to.equal(1, "Write #1 should be called once");
@@ -157,33 +170,45 @@ describe("interchange", function() {
                 expect(writeSpy1.firstCall.args[0]).to.deep.equal({ id: 1 });
                 expect(writeSpy2.firstCall.args[0]).to.deep.equal({ id: 1 });
                 expect(writeSpy3.firstCall.args[0]).to.deep.equal({ id: 1 });
-                expect(writeSpy3.calledBefore(writeSpy2)).to.equal(true, "Write #3 should occur before #2");
-                expect(writeSpy2.calledBefore(writeSpy1)).to.equal(true, "Write #2 should occur before #1");
+                expect(writeSpy3.calledBefore(writeSpy2)).to.equal(
+                    true,
+                    "Write #3 should occur before #2"
+                );
+                expect(writeSpy2.calledBefore(writeSpy1)).to.equal(
+                    true,
+                    "Write #2 should occur before #1"
+                );
             });
 
             it("writes converted data from dependent sources", async function() {
                 const writeSpy1 = sinon.stub().returnsArg(0);
                 const writeSpy2 = sinon.stub().returnsArg(0);
                 const writeSpy3 = sinon.stub().returnsArg(0);
-                const adapter = createInterchange([
-                    { // { id }
-                        write: writeSpy1
-                    },
-                    { // { identifier }
-                        write: writeSpy2,
-                        convert: {
-                            read: val => ({ id: val.identifier }),
-                            write: val => ({ identifier: val.id })
+                const adapter = createInterchange(
+                    [
+                        {
+                            // { id }
+                            write: writeSpy1
+                        },
+                        {
+                            // { identifier }
+                            write: writeSpy2,
+                            convert: {
+                                read: val => ({ id: val.identifier }),
+                                write: val => ({ identifier: val.id })
+                            }
+                        },
+                        {
+                            // { itemID }
+                            write: writeSpy3,
+                            convert: {
+                                read: val => ({ identifier: val.itemID }),
+                                write: val => ({ itemID: val.identifier })
+                            }
                         }
-                    },
-                    { // { itemID }
-                        write: writeSpy3,
-                        convert: {
-                            read: val => ({ identifier: val.itemID }),
-                            write: val => ({ itemID: val.identifier })
-                        }
-                    }
-                ], { writeMode: WriteMode.Series });
+                    ],
+                    { writeMode: WriteMode.Series }
+                );
                 await adapter.write({ id: 1 });
                 expect(writeSpy1.firstCall.args[0]).to.deep.equal({ id: 1 });
                 expect(writeSpy2.firstCall.args[0]).to.deep.equal({ identifier: 1 });
@@ -193,18 +218,23 @@ describe("interchange", function() {
             it("passes written value instead of pre-calculated converted value", async function() {
                 const writeSpy1 = sinon.stub().returnsArg(0);
                 const writeSpy2 = sinon.stub().callsFake(() => ({ identifier: 2 }));
-                const adapter = createInterchange([
-                    { // { id }
-                        write: writeSpy1
-                    },
-                    { // { identifier }
-                        write: writeSpy2,
-                        convert: {
-                            read: val => ({ id: val.identifier }),
-                            write: val => ({ identifier: val.id })
+                const adapter = createInterchange(
+                    [
+                        {
+                            // { id }
+                            write: writeSpy1
+                        },
+                        {
+                            // { identifier }
+                            write: writeSpy2,
+                            convert: {
+                                read: val => ({ id: val.identifier }),
+                                write: val => ({ identifier: val.id })
+                            }
                         }
-                    }
-                ], { writeMode: WriteMode.Series });
+                    ],
+                    { writeMode: WriteMode.Series }
+                );
                 const result = await adapter.write({ id: 1 });
                 expect(writeSpy1.firstCall.args[0]).to.deep.equal({ id: 2 });
                 expect(writeSpy2.firstCall.args[0]).to.deep.equal({ identifier: 1 });
@@ -215,19 +245,24 @@ describe("interchange", function() {
             it("can skip waiting for source writes using 'writeWait'", async function() {
                 const writeSpy1 = sinon.stub().returnsArg(0);
                 const writeSpy2 = sinon.stub().callsFake(() => ({ identifier: 2 }));
-                const adapter = createInterchange([
-                    { // { id }
-                        write: writeSpy1
-                    },
-                    { // { identifier }
-                        write: writeSpy2,
-                        convert: {
-                            read: val => ({ id: val.identifier }),
-                            write: val => ({ identifier: val.id })
+                const adapter = createInterchange(
+                    [
+                        {
+                            // { id }
+                            write: writeSpy1
                         },
-                        writeWait: false
-                    }
-                ], { writeMode: WriteMode.Series });
+                        {
+                            // { identifier }
+                            write: writeSpy2,
+                            convert: {
+                                read: val => ({ id: val.identifier }),
+                                write: val => ({ identifier: val.id })
+                            },
+                            writeWait: false
+                        }
+                    ],
+                    { writeMode: WriteMode.Series }
+                );
                 const result = await adapter.write({ id: 1 });
                 expect(writeSpy1.firstCall.args[0]).to.deep.equal({ id: 1 });
                 expect(writeSpy2.firstCall.args[0]).to.deep.equal({ identifier: 1 });
