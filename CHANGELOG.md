@@ -1,5 +1,11 @@
 # Data-Interchange
 
+## v0.2.1
+_2020-10-09_
+
+ * **Bugfix**:
+   * `write` source function type didn't support async response
+
 ## v0.2.0
 _2020-10-09_
 
