@@ -15,6 +15,7 @@ interface InterchangeSource {
     queueWriteKey?: string | ((value: any) => string);
     read?: (id?: any) => any;
     readError?: (err?: Error) => ReadAction;
+    readResult?: (result?: any) => ReadAction;
     write?: <T>(value: T) => T;
     writeMissingRead?: boolean;
     writeWait?: boolean;
@@ -31,6 +32,7 @@ export interface InterchangeSourceAuxiliary extends InterchangeSource {
 
 export enum ReadAction {
     Fallback = "fallback",
+    Return = "return",
     Throw = "throw"
 }
 

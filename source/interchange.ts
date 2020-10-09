@@ -13,6 +13,12 @@ import {
 
 export type Sources<T> = [InterchangeSourcePrimary<T>, ...InterchangeSourceAuxiliary[]];
 
+export const READ_RESULT_DEFAULT = (res: any) => {
+    if (typeof res === UNDEFINED || res === null) {
+        return ReadAction.Fallback;
+    }
+    return ReadAction.Return;
+};
 const UNDEFINED = "undefined";
 const VALUE_NOOP = <T>(val: T): T => val;
 
@@ -38,6 +44,7 @@ async function processRead<T>(
         const {
             read = null,
             readError = () => ReadAction.Throw,
+            readResult = READ_RESULT_DEFAULT,
             write = null,
             writeMissingRead = true
         } = source;
@@ -90,13 +97,21 @@ async function processRead<T>(
                     throw new Layerr(err, "Interchange read error");
                 } else if (action === ReadAction.Fallback && sourceIndex === sources.length - 1) {
                     throw new Layerr(err, "Interchange fallback requested, but none available");
+                } else if (action === ReadAction.Return) {
+                    return lastValue; // Probably undefined
                 }
             }
             lastValue = initialValue;
             lastConverters = [convertRead, convertWrite];
-            if (typeof initialValue !== UNDEFINED) {
+            const readValueAction = readResult(lastValue);
+            if (readValueAction === ReadAction.Return) {
                 return BOOMERANG_RETURN;
+            } else if (readValueAction === ReadAction.Throw) {
+                throw new Layerr(
+                    `readResult read handler flagged result as invalid for source ${sourceIndex}`
+                );
             }
+            // ReadAction.Fallback simply loops
         }
     });
     return lastValue;

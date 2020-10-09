@@ -1,7 +1,7 @@
 const { expect } = require("chai");
 const { createInterchange } = require("../../dist/interchange.js");
 const { createQueue } = require("../../dist/queue.js");
-const { WriteMode } = require("../../dist/types.js");
+const { ReadAction, WriteMode } = require("../../dist/types.js");
 
 const slow = (value, time = 150) =>
     new Promise(resolve => {
@@ -83,6 +83,26 @@ describe("interchange", function() {
             expect(val).to.deep.equal({ name: "test" });
             expect(writeSpy.callCount).to.equal(1);
             expect(writeSpy.firstCall.args[0]).to.deep.equal({ name: "test" });
+        });
+
+        it("updates values on sources that flagged result as 'fallback'", async function() {
+            const writeSpy = sinon.stub().returnsArg(0);
+            const readResultSpy = sinon.stub().returns(ReadAction.Fallback);
+            const adapter = createInterchange([
+                {
+                    read: () => Promise.resolve({ name: "test" }),
+                    readResult: readResultSpy,
+                    write: writeSpy
+                },
+                {
+                    read: () => Promise.resolve({ name: "test 2", age: 23 })
+                }
+            ]);
+            const val = await adapter.read();
+            expect(val).to.deep.equal({ name: "test 2", age: 23 });
+            expect(writeSpy.callCount).to.equal(1);
+            expect(writeSpy.firstCall.args[0]).to.deep.equal({ name: "test 2", age: 23 });
+            expect(readResultSpy.firstCall.args[0]).to.deep.equal({ name: "test" });
         });
 
         it("supports conversions between sources", async function() {
