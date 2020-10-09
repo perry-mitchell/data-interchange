@@ -16,7 +16,7 @@ interface InterchangeSource {
     read?: (id?: any) => any;
     readError?: (err?: Error) => ReadAction;
     readResult?: (result?: any) => ReadAction;
-    write?: <T>(value: T) => T;
+    write?: <T>(value: T) => T | Promise<T>;
     writeMissingRead?: boolean;
     writeWait?: boolean;
 }
